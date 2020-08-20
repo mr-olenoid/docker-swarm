@@ -1,0 +1,61 @@
+version: '3.3'
+services:
+  dockersocket:
+    image: tecnativa/docker-socket-proxy:latest
+    environment:
+      CONTAINERS: '1'
+      NETWORKS: '1'
+      SERVICES: '1'
+      TASKS: '1'
+    volumes:
+     - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+     - traefik-docker
+    logging:
+      driver: json-file
+    deploy:
+      mode: global
+      placement:
+        constraints:
+         - node.role == manager
+         
+  reverse-proxy:
+    image: traefik:v2.2
+    command:
+     #- --log.level=DEBUG
+     - --api.insecure=true
+     - --providers.docker.endPoint=http://dockersocket:2375
+     - --providers.docker
+     - --providers.docker.exposedbydefault=false
+     - --providers.docker.swarmmode
+     - --entrypoints.web.address=:80
+     - "--entrypoints.websecure.address=:443"
+     - --entrypoints.web.http.redirections.entryPoint.to=websecure
+     - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
+     - "--certificatesresolvers.myresolver.acme.email=serhii.chebonenko@gmail.com"
+     - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
+    ports:
+     - 80:80
+     - 8888:8080
+     - 443:443
+    networks:
+     - traefik-public
+     - traefik-docker
+    logging:
+      driver: json-file
+    volumes:
+      - cert-data:/letsencrypt
+
+networks:
+  traefik-docker:
+    driver: overlay
+  traefik-public:
+    external: true
+
+volumes:
+  cert-data:
+    driver: local
+    driver_opts:
+      type: 'none'
+      o: 'bind'
+      device: '/mnt/gfs/letsencrypt'
